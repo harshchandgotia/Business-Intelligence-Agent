@@ -42,6 +42,18 @@ class DataProfiler:
         if dup_count > 0:
             warnings.append(f"{dup_count} duplicate rows detected")
 
+        # Temporal gap detection for date columns
+        temporal_gaps = []
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower():
+                gaps = self._detect_temporal_gaps(df, col)
+                temporal_gaps.extend(gaps)
+                for g in gaps:
+                    warnings.append(
+                        f"Temporal gap in '{col}': {g['gap_start']} to {g['gap_end']} "
+                        f"({g['gap_days']} days)"
+                    )
+
         quality = self._compute_quality_score(columns, dup_count, len(df))
 
         return DataHealthCard(
@@ -51,6 +63,7 @@ class DataProfiler:
             duplicate_row_count=dup_count,
             overall_quality_score=quality,
             columns=columns,
+            temporal_gaps=temporal_gaps,
             warnings=warnings,
         )
 
@@ -97,6 +110,34 @@ class DataProfiler:
             profile.inconsistent_values = self._detect_inconsistencies(series)
 
         return profile
+
+    def _detect_temporal_gaps(self, df: pd.DataFrame, col: str) -> list[dict]:
+        """Detect large gaps in date/time columns."""
+        try:
+            series = pd.to_datetime(df[col], errors="coerce").dropna().sort_values()
+        except Exception:
+            return []
+        if len(series) < 10:
+            return []
+        diffs = series.diff().dropna()
+        median_gap = diffs.median()
+        if median_gap.total_seconds() == 0:
+            return []
+        threshold = median_gap * 5  # flag gaps 5x the typical interval
+        large_gaps = diffs[diffs > threshold]
+        results = []
+        for i, g in zip(large_gaps.index, large_gaps):
+            pos = series.index.get_loc(i)
+            if pos == 0:
+                continue
+            prev_idx = series.index[pos - 1]
+            results.append({
+                "column": col,
+                "gap_start": str(series.loc[prev_idx].date()),
+                "gap_end": str(series.loc[i].date()),
+                "gap_days": int(g.days),
+            })
+        return results[:10]  # cap
 
     def _detect_inconsistencies(self, series: pd.Series) -> list[dict]:
         """Find values that are likely the same but written differently."""

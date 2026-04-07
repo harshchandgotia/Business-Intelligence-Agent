@@ -1,4 +1,5 @@
 import logging
+from pydantic import BaseModel
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,14 @@ _LLM_TIMEOUT = 30.0  # seconds
 class LLMClient:
     """Unified LLM interface."""
 
-    def generate(self, prompt: str, system: str = None, json_mode: bool = False) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system: str = None,
+        json_mode: bool = False,
+        model: str = None,
+        response_schema: type[BaseModel] | None = None,
+    ) -> str:
         raise NotImplementedError
 
     def count_tokens(self, text: str) -> int:
@@ -21,15 +29,35 @@ class GroqClient(LLMClient):
         from groq import Groq
         self._client = Groq(api_key=settings.GROQ_API_KEY, timeout=_LLM_TIMEOUT)
 
-    def generate(self, prompt: str, system: str = None, json_mode: bool = False) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system: str = None,
+        json_mode: bool = False,
+        model: str = None,
+        response_schema: type[BaseModel] | None = None,
+    ) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+
+        model = model or settings.GROQ_MODEL
+
+        # Build response_format: structured schema > json_mode > None
+        response_format = None
+        if response_schema is not None:
+            response_format = {
+                "type": "json_object",
+                "schema": response_schema.model_json_schema(),
+            }
+        elif json_mode:
+            response_format = {"type": "json_object"}
+
         response = self._client.chat.completions.create(
-            model=settings.GROQ_MODEL,
+            model=model,
             messages=messages,
-            response_format={"type": "json_object"} if json_mode else None,
+            response_format=response_format,
         )
         return response.choices[0].message.content
 

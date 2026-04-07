@@ -1,5 +1,8 @@
+import logging
 from src.db.connection import db
 from src.models.schema import ColumnInfo, TableSchema, DatabaseSchema
+
+logger = logging.getLogger(__name__)
 
 
 def discover_schema() -> DatabaseSchema:
@@ -23,6 +26,35 @@ def discover_schema() -> DatabaseSchema:
 
     fks = _get_foreign_keys()
     return DatabaseSchema(tables=tables, foreign_keys=fks)
+
+
+def check_referential_integrity(fks: list[dict]) -> list[dict]:
+    """Check for orphaned foreign key references.
+    Returns list of FK relationships with orphan counts."""
+    issues = []
+    for fk in fks:
+        try:
+            with db.cursor() as cur:
+                cur.execute(
+                    f'SELECT COUNT(*) AS orphans FROM "{fk["from_table"]}" ft '
+                    f'LEFT JOIN "{fk["to_table"]}" tt '
+                    f'ON ft."{fk["from_col"]}" = tt."{fk["to_col"]}" '
+                    f'WHERE tt."{fk["to_col"]}" IS NULL '
+                    f'AND ft."{fk["from_col"]}" IS NOT NULL'
+                )
+                row = cur.fetchone()
+                orphans = row["orphans"] if row else 0
+                if orphans > 0:
+                    issues.append({
+                        "from_table": fk["from_table"],
+                        "from_col": fk["from_col"],
+                        "to_table": fk["to_table"],
+                        "to_col": fk["to_col"],
+                        "orphan_count": orphans,
+                    })
+        except Exception as e:
+            logger.debug("Referential integrity check failed for %s: %s", fk, e)
+    return issues
 
 
 def _get_columns(table_name: str, row_count: int) -> list[ColumnInfo]:

@@ -33,15 +33,24 @@ class NarrativeAgent(BaseAgent):
 
         response = self._llm.generate(prompt, system=system)
 
-        # Also ask for chart suggestion
+        # Chart suggestion with narrative context for coherence
+        columns = list(sql_results[0].keys()) if sql_results else []
+        row_count = len(sql_results)
         chart_prompt = (
-            f"Given this data question: {question}\n"
-            f"Columns available: {list(sql_results[0].keys()) if sql_results else []}\n"
-            "Suggest the best chart type. Respond JSON: "
-            '{"chart_type": "bar|line|pie|scatter|heatmap|none", '
+            f"Data question: {question}\n"
+            f"Narrative written: {response[:500]}\n"
+            f"Columns available: {columns}\n"
+            f"Row count: {row_count}\n"
+            "Suggest the best chart that supports this specific narrative.\n"
+            "For ranked lists or top-N results with <=20 rows, prefer 'table'.\n"
+            "Respond JSON: "
+            '{"chart_type": "bar|line|pie|scatter|heatmap|table|none", '
             '"x_column": "...", "y_column": "...", "group_by": "..." or null}'
         )
-        chart_response = self._llm.generate(chart_prompt, json_mode=True)
+        from config.settings import settings
+        chart_response = self._llm.generate(
+            chart_prompt, json_mode=True, model=settings.GROQ_MODEL_LIGHT,
+        )
 
         try:
             chart_spec = extract_json(chart_response, fallback={"chart_type": "none"})

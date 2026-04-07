@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     # LLM (Groq only)
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL_HEAVY: str = "llama-3.3-70b-versatile"   # narrative, critique, confidence
+    GROQ_MODEL_LIGHT: str = "llama-3.1-8b-instant"       # routing, SQL retry, JSON extraction
 
     # Database — prefer DATABASE_URL; fall back to individual fields
     DATABASE_URL: Optional[str] = None

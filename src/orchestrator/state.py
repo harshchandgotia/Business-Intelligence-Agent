@@ -44,6 +44,10 @@ class GraphState(TypedDict):
     # Preprocessing detour
     needs_preprocessing: bool
     preprocessing_applied: bool
+    cleaning_context: Optional[str]  # summary of cleaning actions for SQL context
+
+    # Human review flag
+    requires_human_review: bool
 
     # Output
     confidence: Optional[ConfidenceScore]

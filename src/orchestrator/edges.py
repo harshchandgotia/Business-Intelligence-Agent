@@ -30,8 +30,9 @@ def should_preprocess(state: GraphState) -> str:
 
 
 def should_decompose(state: GraphState) -> str:
-    route = state.get("route")
-    if route == RouteType.ANALYTICAL:
+    """Gate decomposition: only activate for complex analytical queries."""
+    decomp = state.get("decomposition")
+    if decomp and len(decomp.sub_questions) > 1:
         return "decompose"
     return "skip"
 

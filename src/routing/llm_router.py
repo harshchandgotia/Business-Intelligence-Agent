@@ -1,5 +1,6 @@
 from src.llm.factory import get_llm
 from src.models.query import RouteType
+from config.settings import settings
 
 
 class LLMRouter:
@@ -25,7 +26,10 @@ class LLMRouter:
         prompt = query
         if conversation_context and conversation_context != "No previous conversation.":
             prompt = f"Conversation context:\n{conversation_context}\n\nCurrent question: {query}"
-        response = llm.generate(prompt, system=self.SYSTEM).strip().upper()
+        # Use light model for routing — simple classification task
+        response = llm.generate(
+            prompt, system=self.SYSTEM, model=settings.GROQ_MODEL_LIGHT,
+        ).strip().upper()
 
         # Try exact match first
         mapping = {

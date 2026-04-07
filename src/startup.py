@@ -1,7 +1,7 @@
 """App startup: connect to PostgreSQL, seed if empty, discover schema, build health cards."""
 import logging
 from src.db.connection import db
-from src.ingestion.schema_discovery import discover_schema
+from src.ingestion.schema_discovery import discover_schema, check_referential_integrity
 from src.preprocessing.profiler import DataProfiler
 from src.models.schema import DatabaseSchema
 from src.models.health import DataHealthCard
@@ -48,9 +48,25 @@ def _ensure_seeded():
 def _build_health_cards(schema: DatabaseSchema) -> dict[str, DataHealthCard]:
     profiler = DataProfiler()
     cards = {}
+
+    # Check referential integrity across FK relationships
+    ref_issues = check_referential_integrity(schema.foreign_keys)
+
     for table in schema.tables:
         try:
-            cards[table.name] = profiler.profile_table(table.name)
+            card = profiler.profile_table(table.name)
+            # Attach referential integrity issues for this table
+            table_ref_issues = [
+                ri for ri in ref_issues if ri["from_table"] == table.name
+            ]
+            if table_ref_issues:
+                card.referential_issues = table_ref_issues
+                for ri in table_ref_issues:
+                    card.warnings.append(
+                        f"Referential integrity: {ri['orphan_count']} orphaned rows "
+                        f"in {ri['from_table']}.{ri['from_col']} → {ri['to_table']}.{ri['to_col']}"
+                    )
+            cards[table.name] = card
         except Exception as e:
             logger.warning("Could not profile table %s: %s", table.name, e)
     return cards

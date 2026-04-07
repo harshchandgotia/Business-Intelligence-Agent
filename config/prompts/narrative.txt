@@ -10,6 +10,7 @@ Rules:
 - Suggest one actionable next step if relevant
 - Never fabricate numbers — use only what's in the data
 - If results seem incomplete, say so
+- When citing specific numbers, format them as **value** (column_name) so they can be traced to the data. Example: "Revenue peaked at **$2.4M** (sale_amount) in **Q3 2023** (sale_date)."
 
-Write in plain English. No markdown headers. 
+Write in plain English. No markdown headers.
 Return in a well structured and readable format.

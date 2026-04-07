@@ -142,13 +142,18 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 def _render_chart(chart_spec: dict, data: list[dict]):
-    """Render a Plotly chart from spec + data. Returns None on any failure."""
+    """Render a Plotly chart from spec + data. Returns None on any failure.
+    Returns 'table' string if a styled table should be rendered instead."""
     try:
         df = pd.DataFrame(data)
         ct = chart_spec.get("chart_type", "bar")
         x = chart_spec.get("x_column")
         y = chart_spec.get("y_column")
         color = chart_spec.get("group_by")
+
+        # Table chart type — styled dataframe for ranked lists / small result sets
+        if ct == "table" or (ct == "none" and len(df) > 0 and len(df) <= 20):
+            return "table"
 
         # Validate columns exist
         if x and x not in df.columns:
@@ -168,6 +173,9 @@ def _render_chart(chart_spec: dict, data: list[dict]):
                 y = num_cols[0]
 
         if not x or not y:
+            # Fall back to styled table for small result sets
+            if len(df) <= 20:
+                return "table"
             return None
 
         # Fallback: pie with too many categories → bar
@@ -188,6 +196,20 @@ def _render_chart(chart_spec: dict, data: list[dict]):
         return None
 
 
+def _render_styled_table(data: list[dict]):
+    """Render a styled dataframe with conditional formatting."""
+    df = pd.DataFrame(data)
+    num_cols = df.select_dtypes(include=["number"]).columns.tolist()
+
+    styled = df.style
+    if num_cols:
+        styled = styled.highlight_max(subset=num_cols, color="lightgreen", axis=0)
+        styled = styled.highlight_min(subset=num_cols, color="lightyellow", axis=0)
+        styled = styled.format({c: "{:,.2f}" for c in num_cols})
+
+    st.dataframe(styled, use_container_width=True)
+
+
 # ---------------------------------------------------------------------------
 # Chat history
 # ---------------------------------------------------------------------------
@@ -206,6 +228,8 @@ for msg in st.session_state.messages:
                 st.markdown(f"**Route:** {_t.get('route', '—')}")
                 st.markdown(f"**Critique loops:** {_t.get('critique_loops', 0)}")
                 st.markdown(f"**Preprocessing:** {'Yes' if _t.get('preprocessing') else 'No'}")
+                if _t.get("decomposed"):
+                    st.markdown(f"**Decomposed into:** {_t.get('sub_question_count', 1)} sub-questions")
                 if _t.get("sql"):
                     st.code(_t["sql"], language="sql")
 
@@ -238,13 +262,16 @@ if prompt := st.chat_input("Ask a question about your data"):
                 "verification": None,
                 "needs_preprocessing": False,
                 "preprocessing_applied": False,
+                "cleaning_context": None,
+                "requires_human_review": False,
                 "confidence": None,
                 "trace": None,
                 "error": None,
             }
 
             try:
-                final_state = st.session_state.graph.invoke(initial_state)
+                config = {"configurable": {"thread_id": st.session_state.conv_id}}
+                final_state = st.session_state.graph.invoke(initial_state, config=config)
             except Exception as e:
                 st.error(f"Graph execution failed: {e}")
                 st.session_state.messages.append({
@@ -255,6 +282,10 @@ if prompt := st.chat_input("Ask a question about your data"):
 
             narrative = final_state.get("narrative", "No results.")
             confidence = final_state.get("confidence")
+
+            # Human review warning badge
+            if final_state.get("requires_human_review"):
+                st.warning("This result may need human review — low confidence or max critique loops reached.")
 
             # Confidence badge
             if confidence:
@@ -276,20 +307,33 @@ if prompt := st.chat_input("Ask a question about your data"):
             # Chart rendering with error handling
             chart = None
             chart_spec = final_state.get("chart_spec")
-            if chart_spec and chart_spec.get("chart_type") != "none" and all_data:
+            if chart_spec and all_data:
                 chart = _render_chart(chart_spec, all_data)
-                if chart:
+                if chart == "table":
+                    _render_styled_table(all_data)
+                    chart = None  # don't store plotly fig
+                elif chart:
                     st.plotly_chart(chart, use_container_width=True)
-                else:
-                    st.caption("Chart unavailable — showing data table instead.")
+                elif chart_spec.get("chart_type") != "none":
+                    # Fallback to styled table for small results
+                    if len(all_data) <= 20:
+                        _render_styled_table(all_data)
+                    else:
+                        st.caption("Chart unavailable — showing data table instead.")
 
-            # Data table
-            if all_data:
-                with st.expander(f"View data ({len(all_data)} rows)"):
-                    st.dataframe(pd.DataFrame(all_data))
-
-            # SQL viewer
-            if sql_results:
+            # SQL & Results side-by-side
+            if sql_results and all_data:
+                with st.expander("SQL & Results"):
+                    col_sql, col_data = st.columns([1, 1])
+                    with col_sql:
+                        for r in sql_results:
+                            if r.sql:
+                                st.code(r.sql, language="sql")
+                            if r.error:
+                                st.error(r.error)
+                    with col_data:
+                        st.dataframe(pd.DataFrame(all_data), use_container_width=True)
+            elif sql_results:
                 with st.expander("View SQL"):
                     for r in sql_results:
                         if r.sql:
@@ -306,7 +350,7 @@ if prompt := st.chat_input("Ask a question about your data"):
             # Show pipeline errors if present (Issue #6)
             pipeline_error = final_state.get("error")
             if pipeline_error:
-                st.warning(f"⚠️ Pipeline issue: {pipeline_error}")
+                st.warning(f"Pipeline issue: {pipeline_error}")
 
             # Memory — pass structured data (Issue #14)
             sql_queries = [r.sql for r in sql_results if r.sql] if sql_results else []
@@ -320,6 +364,7 @@ if prompt := st.chat_input("Ask a question about your data"):
 
             # Save to history
             first_sql = sql_results[0].sql if sql_results else None
+            decomp = final_state.get("decomposition")
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": narrative,
@@ -329,6 +374,8 @@ if prompt := st.chat_input("Ask a question about your data"):
                     "route": str(final_state.get("route")),
                     "critique_loops": final_state.get("critique_count", 0),
                     "preprocessing": final_state.get("preprocessing_applied", False),
+                    "decomposed": decomp is not None and len(decomp.sub_questions) > 1 if decomp else False,
+                    "sub_question_count": len(decomp.sub_questions) if decomp else 1,
                     "sql": first_sql,
                 },
             })

@@ -2,8 +2,10 @@ import json
 import logging
 from src.llm.json_utils import extract_json
 from src.agents.base import BaseAgent
+from src.agents.value_resolver import resolve_values
 from src.models.schema import DatabaseSchema
 from src.models.query import SQLResult
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +42,20 @@ class SQLAgent(BaseAgent):
         sub_question_id: int = 0,
         conversation_context: str = "",
     ) -> dict:
+        # Fuzzy value resolution — catch misspellings before SQL generation
+        value_hints = resolve_values(question, schema)
+        extra_context = conversation_context
+        if value_hints:
+            extra_context += "\nValue corrections: " + "; ".join(value_hints)
+            logger.info("Value resolver hints: %s", value_hints)
+
+        # Schema linking — filter to relevant tables/columns
+        filtered_schema = _filter_relevant_schema(question, schema)
+
         prompt = self._load_prompt("sql_generation.txt").format(
-            schema=schema.to_prompt_string(),
+            schema=filtered_schema.to_prompt_string(),
             question=question,
-            context=conversation_context,
+            context=extra_context,
         )
 
         response = self._llm.generate(prompt, system=_SYSTEM_PROMPT, json_mode=True)
@@ -133,7 +145,11 @@ class SQLAgent(BaseAgent):
             failed_sql=failed_sql,
             error=error,
         )
-        response = self._llm.generate(prompt, system=_SYSTEM_PROMPT, json_mode=True)
+        # Use light model for retries — lower cost, sufficient quality
+        response = self._llm.generate(
+            prompt, system=_SYSTEM_PROMPT, json_mode=True,
+            model=settings.GROQ_MODEL_LIGHT,
+        )
         parsed = extract_json(response, fallback={"sql": "SELECT 1", "reasoning": "JSON parse failed on retry"})
         return {
             "sql": parsed["sql"],
@@ -145,3 +161,36 @@ class SQLAgent(BaseAgent):
 def _is_recoverable(error: str) -> bool:
     error_lower = error.lower()
     return any(kw in error_lower for kw in _RECOVERABLE_ERRORS)
+
+
+def _filter_relevant_schema(question: str, schema: DatabaseSchema) -> DatabaseSchema:
+    """Schema linking: keep only tables/columns that share vocabulary with the question.
+    Falls back to full schema if no matches found."""
+    q_words = set(question.lower().split())
+    q_lower = question.lower()
+
+    relevant_tables = []
+    for t in schema.tables:
+        table_words = {t.name.lower()} | {c.name.lower() for c in t.columns}
+        # Match on table/column names or sample values
+        name_match = bool(q_words & table_words)
+        value_match = any(
+            v.lower() in q_lower
+            for c in t.columns
+            for v in c.sample_values
+        )
+        if name_match or value_match:
+            relevant_tables.append(t)
+
+    # Fall back to full schema if nothing matched
+    if not relevant_tables:
+        return schema
+
+    return DatabaseSchema(
+        tables=relevant_tables,
+        foreign_keys=[
+            fk for fk in schema.foreign_keys
+            if fk["from_table"] in {t.name for t in relevant_tables}
+            or fk["to_table"] in {t.name for t in relevant_tables}
+        ],
+    )

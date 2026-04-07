@@ -153,28 +153,74 @@ def template_node(state: GraphState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# decompose_node
+# decompose_node  (activated for complex analytical queries, word count > 15)
 # ---------------------------------------------------------------------------
 
 def decompose_node(state: GraphState) -> dict:
+    query = state["query"]
+    route = state.get("route")
+
+    # Only decompose analytical queries that are complex enough
+    word_count = len(query.split())
+    if route != RouteType.ANALYTICAL or word_count <= 15:
+        # Pass through as a single question
+        return {"decomposition": None}
+
     try:
         agent = _get_decomposer()
-        result = agent.run(question=state["query"], schema=state["schema"])
-        return {"decomposition": result["decomposition"]}
+        result = agent.run(question=query, schema=state["schema"])
+        return {"decomposition": result.get("decomposition")}
     except Exception as e:
         logger.error("decompose_node failed: %s", e)
-        return {"error": f"Decomposition failed: {e}"}
+        # Graceful fallback — continue without decomposition
+        return {"decomposition": None}
 
 
 # ---------------------------------------------------------------------------
-# sql_node  (uses retry-aware SQLAgent)
+# sql_node  (uses retry-aware SQLAgent with dependency resolution)
 # ---------------------------------------------------------------------------
+
+def _topological_sort(sub_questions):
+    """Sort sub-questions respecting depends_on ordering."""
+    by_id = {sq.id: sq for sq in sub_questions}
+    visited = set()
+    order = []
+
+    def visit(sq_id):
+        if sq_id in visited:
+            return
+        visited.add(sq_id)
+        sq = by_id.get(sq_id)
+        if sq:
+            for dep_id in sq.depends_on:
+                visit(dep_id)
+            order.append(sq)
+
+    for sq in sub_questions:
+        visit(sq.id)
+    return order
+
+
+def _build_dependency_context(sq, executed: dict) -> str:
+    """Build context string from previously executed dependent sub-questions."""
+    if not sq.depends_on:
+        return ""
+    parts = []
+    for dep_id in sq.depends_on:
+        if dep_id in executed:
+            dep_result = executed[dep_id]
+            if dep_result.data:
+                summary = f"Results from sub-question {dep_id}: {dep_result.data[:5]}"
+                parts.append(summary)
+    return "\n" + "\n".join(parts) if parts else ""
+
 
 def sql_node(state: GraphState) -> dict:
     try:
         agent = _get_sql_agent()
         decomp = state.get("decomposition")
         results = []
+        executed = {}  # sq.id -> SQLResult, for dependency context
 
         sub_questions = decomp.sub_questions if decomp else []
         if not sub_questions:
@@ -182,34 +228,47 @@ def sql_node(state: GraphState) -> dict:
             from src.models.query import SubQuestion
             sub_questions = [SubQuestion(id=0, text=state["query"])]
 
-        for sq in sub_questions:
+        # Topological sort to respect dependencies
+        sorted_sqs = _topological_sort(sub_questions)
+
+        # Inject cleaning context if available
+        ctx = state.get("conversation_context", "")
+        cleaning_ctx = state.get("cleaning_context")
+        if cleaning_ctx:
+            ctx += f"\nData was cleaned: {cleaning_ctx}"
+
+        for sq in sorted_sqs:
+            dep_context = _build_dependency_context(sq, executed)
             t0 = _now()
             outcome = agent.execute_with_retry(
-                question=sq.text,
+                question=sq.text + dep_context,
                 schema=state["schema"],
                 sub_question_id=sq.id,
-                conversation_context=state.get("conversation_context", ""),
+                conversation_context=ctx,
             )
             elapsed = int((_now() - t0).total_seconds() * 1000)
 
             if "rows" in outcome:
                 rows = outcome["rows"]
-                results.append(SQLResult(
+                sql_result = SQLResult(
                     sub_question_id=sq.id,
                     sql=outcome["sql"],
                     columns=list(rows[0].keys()) if rows else [],
                     row_count=len(rows),
                     data=rows,
                     execution_time_ms=elapsed,
-                ))
+                )
             else:
-                results.append(SQLResult(
+                sql_result = SQLResult(
                     sub_question_id=sq.id,
                     sql=outcome.get("sql", ""),
                     columns=[], row_count=0, data=[],
                     execution_time_ms=elapsed,
                     error=outcome.get("error", "Unknown error"),
-                ))
+                )
+
+            results.append(sql_result)
+            executed[sq.id] = sql_result
 
         return {"sql_results": results}
     except Exception as e:
@@ -275,10 +334,16 @@ def preprocess_node(state: GraphState) -> dict:
                     t.name = log.cleaned_view  # e.g., "transactions_cleaned"
                     break
 
+        # Store cleaning summary so SQL agent knows what changed
+        cleaning_summary = ", ".join(
+            f"{a.target_column}: {a.description}" for a in plan.actions
+        ) if plan.actions else ""
+
         return {
             "preprocessing_applied": True,
             "health_cards": health_cards,
             "schema": updated_schema,
+            "cleaning_context": cleaning_summary,
         }
     except Exception as e:
         logger.error("preprocess_node failed: %s", e)
@@ -307,6 +372,16 @@ def _infer_table_from_results(state: GraphState) -> str:
         return schema.tables[0].name
 
     raise ValueError("Cannot determine table to preprocess: no schema tables available")
+
+
+# ---------------------------------------------------------------------------
+# analysis_join_node  (fan-out dispatch point for parallel trend + anomaly)
+# ---------------------------------------------------------------------------
+
+def analysis_join_node(state: GraphState) -> dict:
+    """Pass-through node that serves as a fan-out dispatch point.
+    The graph uses Send() from this node to run trend and anomaly in parallel."""
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +514,14 @@ def verify_node(state: GraphState) -> dict:
                 uncertain_aspects=["query execution"],
             )
 
-        return {"confidence": confidence}
+        # Flag for human review when confidence is low or critique loops maxed out
+        from config.settings import settings
+        requires_review = (
+            confidence.score < settings.CONFIDENCE_THRESHOLD
+            or state.get("critique_count", 0) >= settings.MAX_CRITIQUE_LOOPS
+        )
+
+        return {"confidence": confidence, "requires_human_review": requires_review}
     except Exception as e:
         logger.error("verify_node failed: %s", e)
         return {"confidence": ConfidenceScore(score=0.0, reasoning=str(e), uncertain_aspects=[])}
