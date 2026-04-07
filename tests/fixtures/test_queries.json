@@ -1,0 +1,403 @@
+[
+  {
+    "id": 1,
+    "query": "total revenue",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["SUM", "sale_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 2,
+    "query": "top 5 brands by revenue",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["GROUP BY", "ORDER BY", "LIMIT 5"],
+    "expected_row_count": 5
+  },
+  {
+    "id": 3,
+    "query": "count transactions",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["COUNT"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 4,
+    "query": "average sale amount by category",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["AVG", "category"],
+    "expected_row_count": 6
+  },
+  {
+    "id": 5,
+    "query": "minimum and maximum base price",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["MIN", "MAX", "base_price"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 6,
+    "query": "distinct brands",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["DISTINCT", "brand"],
+    "min_row_count": 1
+  },
+  {
+    "id": 7,
+    "query": "total quantity sold",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["SUM", "quantity"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 8,
+    "query": "revenue for Nike brand",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["Nike", "sale_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 9,
+    "query": "count products per category",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["COUNT", "category", "GROUP BY"],
+    "expected_row_count": 6
+  },
+  {
+    "id": 10,
+    "query": "total purchase amount",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["SUM", "purchase_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 11,
+    "query": "revenue in Q1 2023",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["2023", "sale_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 12,
+    "query": "how many transactions in the last 6 months of 2022",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["COUNT", "2022"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 13,
+    "query": "monthly revenue breakdown for 2024",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["sale_amount", "2024"],
+    "min_row_count": 1
+  },
+  {
+    "id": 14,
+    "query": "compare revenue in 2022 vs 2023",
+    "category": "date_filter",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 15,
+    "query": "quarterly revenue breakdown",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 16,
+    "query": "transactions on 2023-06-15",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["2023-06-15"],
+    "min_row_count": 0
+  },
+  {
+    "id": 17,
+    "query": "weekly transaction count in January 2024",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["COUNT", "2024"],
+    "min_row_count": 1
+  },
+  {
+    "id": 18,
+    "query": "revenue between 2021 and 2022",
+    "category": "date_filter",
+    "expected_route": "simple",
+    "expected_sql_contains": ["sale_amount", "2021", "2022"],
+    "min_row_count": 1
+  },
+  {
+    "id": 19,
+    "query": "revenue by brand",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["brand", "sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 20,
+    "query": "top categories by quantity sold",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["category", "quantity"],
+    "min_row_count": 1
+  },
+  {
+    "id": 21,
+    "query": "average sale amount by color",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["AVG", "color", "sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 22,
+    "query": "revenue by brand and category",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["brand", "category", "sale_amount", "GROUP BY"],
+    "min_row_count": 1
+  },
+  {
+    "id": 23,
+    "query": "products with no transactions",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["LEFT JOIN"],
+    "min_row_count": 0
+  },
+  {
+    "id": 24,
+    "query": "brands with more than 100000 in total revenue",
+    "category": "group_by_having",
+    "expected_route": "simple",
+    "expected_sql_contains": ["HAVING", "brand", "sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 25,
+    "query": "colors with more than 10000 transactions",
+    "category": "group_by_having",
+    "expected_route": "simple",
+    "expected_sql_contains": ["HAVING", "color"],
+    "min_row_count": 1
+  },
+  {
+    "id": 26,
+    "query": "months with more than 5000 transactions",
+    "category": "group_by_having",
+    "expected_route": "simple",
+    "expected_sql_contains": ["HAVING", "COUNT"],
+    "min_row_count": 1
+  },
+  {
+    "id": 27,
+    "query": "categories where average sale is above 50 dollars",
+    "category": "group_by_having",
+    "expected_route": "simple",
+    "expected_sql_contains": ["HAVING", "AVG", "category"],
+    "min_row_count": 1
+  },
+  {
+    "id": 28,
+    "query": "products with more than 100 transactions",
+    "category": "group_by_having",
+    "expected_route": "simple",
+    "expected_sql_contains": ["HAVING", "product"],
+    "min_row_count": 1
+  },
+  {
+    "id": 29,
+    "query": "yearly revenue trend",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 30,
+    "query": "compare Q1 vs Q2 2023 by brand",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["brand", "2023"],
+    "min_row_count": 1
+  },
+  {
+    "id": 31,
+    "query": "which color has grown fastest in revenue",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["color", "sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 32,
+    "query": "show me seasonal patterns in outerwear sales",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["Outerwear"],
+    "min_row_count": 1
+  },
+  {
+    "id": 33,
+    "query": "what was the highest revenue month ever",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 34,
+    "query": "brand market share shift from 2021 to 2023",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["brand", "sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 35,
+    "query": "identify anomalies in monthly revenue",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["sale_amount"],
+    "min_row_count": 1
+  },
+  {
+    "id": 36,
+    "query": "what tables do you have",
+    "category": "meta",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 37,
+    "query": "what columns are in the transactions table",
+    "category": "meta",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 38,
+    "query": "describe the data",
+    "category": "meta",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 39,
+    "query": "how much data do you have",
+    "category": "meta",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 40,
+    "query": "give me an overview of the database",
+    "category": "meta",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 41,
+    "query": "tell me something",
+    "category": "edge_case",
+    "expected_route": "meta",
+    "expected_sql_contains": null,
+    "expected_row_count": null
+  },
+  {
+    "id": 42,
+    "query": "revenue in 2030",
+    "category": "edge_case",
+    "expected_route": "simple",
+    "expected_sql_contains": ["2030", "sale_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 43,
+    "query": "revenue from Zaara brand",
+    "category": "edge_case",
+    "expected_route": "simple",
+    "expected_sql_contains": ["sale_amount"],
+    "expected_row_count": 1
+  },
+  {
+    "id": 44,
+    "query": "show me everything",
+    "category": "edge_case",
+    "expected_route": "simple",
+    "expected_sql_contains": ["SELECT"],
+    "min_row_count": 0
+  },
+  {
+    "id": 45,
+    "query": "show revenue and delete old records",
+    "category": "edge_case",
+    "expected_route": "simple",
+    "expected_sql_contains": ["sale_amount"],
+    "expected_row_count": 1,
+    "must_not_contain": ["DELETE"]
+  },
+  {
+    "id": 46,
+    "query": "analyze color trends across all years",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["color"],
+    "min_row_count": 1
+  },
+  {
+    "id": 47,
+    "query": "why did revenue drop in Q3 2022",
+    "category": "analytical_trend",
+    "expected_route": "analytical",
+    "expected_sql_contains": ["2022"],
+    "min_row_count": 1
+  },
+  {
+    "id": 48,
+    "query": "top 10 products by total quantity",
+    "category": "simple_aggregation",
+    "expected_route": "simple",
+    "expected_sql_contains": ["LIMIT 10", "quantity"],
+    "expected_row_count": 10
+  },
+  {
+    "id": 49,
+    "query": "revenue per brand per year",
+    "category": "analytical_trend",
+    "expected_route": "simple",
+    "expected_sql_contains": ["brand", "sale_amount", "GROUP BY"],
+    "min_row_count": 1
+  },
+  {
+    "id": 50,
+    "query": "which brands sell the most footwear",
+    "category": "multi_table_join",
+    "expected_route": "simple",
+    "expected_sql_contains": ["Footwear", "brand"],
+    "min_row_count": 1
+  }
+]

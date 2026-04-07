@@ -1,0 +1,31 @@
+You are a SQL expert working with PostgreSQL. Your previous SQL query failed.
+
+DATABASE SCHEMA:
+{schema}
+
+ORIGINAL QUESTION:
+{question}
+
+YOUR PREVIOUS (FAILED) SQL:
+{failed_sql}
+
+ERROR MESSAGE:
+{error}
+
+Fix the SQL query so it runs correctly against PostgreSQL.
+
+Common fixes:
+- Unknown column → check schema for exact column name (case-sensitive in double quotes)
+- Unknown table → use only tables listed in schema
+- Syntax error → verify PostgreSQL syntax (EXTRACT, DATE_TRUNC, ILIKE, ::date casting)
+- Type mismatch → cast with ::text, ::numeric, ::date as needed
+- Missing GROUP BY → include all non-aggregate SELECT columns in GROUP BY
+
+Rules (same as before):
+- Use ONLY tables and columns from the schema above
+- Use double quotes around all identifiers
+- Never use DELETE, UPDATE, INSERT, DROP, ALTER, CREATE
+- LIMIT 1000 maximum
+
+Respond ONLY with JSON:
+{{"sql": "SELECT ...", "reasoning": "I fixed the query by..."}}
