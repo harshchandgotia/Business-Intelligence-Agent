@@ -296,9 +296,14 @@ if prompt := st.chat_input("Ask a question about your data"):
                 )
                 st.markdown(f"**Confidence: {confidence.score:.0%}** :{conf_color}_circle:")
                 if confidence.uncertain_aspects:
-                    st.caption(f"Uncertain about: {', '.join(confidence.uncertain_aspects)}")
+                    truncated = [a[:60] for a in confidence.uncertain_aspects[:3]]
+                    st.caption(f"Uncertain about: {', '.join(truncated)}")
 
-            st.write(narrative)
+            # Strip any markdown the LLM may have included despite prompt instructions
+            import re
+            clean_narrative = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', narrative)
+            clean_narrative = re.sub(r'#{1,6}\s*', '', clean_narrative)
+            st.write(clean_narrative)
 
             # Build data for chart
             sql_results = final_state.get("sql_results", [])

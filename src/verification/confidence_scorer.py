@@ -65,7 +65,7 @@ class ConfidenceScorer:
             f"Sanity warnings: {sanity_warnings if sanity_warnings else 'None'}\n\n"
             "Rate your confidence (0.0 to 1.0) that this SQL correctly answers "
             "the question. Respond JSON:\n"
-            '{"score": 0.85, "reasoning": "...", "uncertain_aspects": ["..."]}'
+            '{"score": 0.85, "reasoning": "...", "uncertain_aspects": ["short phrase, max 5 words"]}'
         )
 
         response = llm.generate(
